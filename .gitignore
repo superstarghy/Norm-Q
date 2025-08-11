@@ -7,7 +7,7 @@ workspace/*
 distillation/workspace/
 .vscode
 eval_metrics/tmp
-results
+result
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
