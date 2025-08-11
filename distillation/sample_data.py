@@ -77,7 +77,7 @@ if __name__ == '__main__':
         sequences, embeddings = [], []
         for prompt_idx, prompt in enumerate(input_data):
             if rank == 0:
-                print(f'generating samples for prompt {prompt_idx} ...')
+                print(f'generating samples for prompt {prompt_idx}: {prompt} ...')
 
             prompt_ids = tokenizer.encode(prompt)
             chunk_size_per_process_prompt = chunk_size_per_process // len(input_data) + 1
@@ -109,15 +109,23 @@ if __name__ == '__main__':
                         max_new_tokens=args.max_new_tokens, output_hidden_states=args.save_embeddings,
                         return_dict_in_generate=True, **model_kwargs, **generation_config,
                     )
-                    sequences_batch = generation_output.sequences[:,len(prompt_ids):].cpu()
-                    sequences_batch = pad_to_len(sequences_batch, args.max_new_tokens, tokenizer.eos_token_id)
+                    # sequences: batch_size x total_length
+                    sequences_batch = generation_output.sequences[:,len(prompt_ids):].cpu() # batch_size x generated_length
+                    sequences_batch = pad_to_len(sequences_batch, args.max_new_tokens, tokenizer.eos_token_id) # 512 x 32
                     sequences.append(sequences_batch)
 
                 if args.save_embeddings:
-                    last_hidden_states = [hs[-1][:, -1, :] for hs in generation_output.hidden_states] # gather last Layer hidden_states
-                    last_hidden_states = torch.stack(last_hidden_states, dim=1).cpu()
-                    last_hidden_states = pad_to_len(last_hidden_states, args.max_new_tokens, tokenizer.eos_token_id)
+                    # gather last Layer hidden_states
+                    # hidden_states: generated_length * layers * batch_size x sequence_length x hidden_size 
+                    # gLength * 36 * (512 x 1 x 1280)
+                    last_hidden_states = [hs[-1][:, -1, :] for hs in generation_output.hidden_states] #  gLength * (512x1280)
+                    last_hidden_states = torch.stack(last_hidden_states, dim=1).cpu() # 512 x gLength x 1280 
+                    last_hidden_states = pad_to_len(last_hidden_states, args.max_new_tokens, tokenizer.eos_token_id) # 512x32x1280
                     embeddings.append(last_hidden_states)
+                    del last_hidden_states
+                del generation_output
+                del sequences_batch
+                torch.cuda.empty_cache()
 
         sequences = torch.cat(sequences, dim=0)
         if rank == 0:

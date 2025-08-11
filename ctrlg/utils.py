@@ -1,5 +1,7 @@
 import torch
 from transformers import LogitsProcessor
+from torch.profiler import record_function
+from .mytest import *
 
 torch.set_float32_matmul_precision('high')
 
@@ -98,7 +100,7 @@ def ends_at(prefix, suffix,
 class ConstraintLogitsProcessor(LogitsProcessor):
     def __init__(self, hmm_model, dfa_model,
         min_new_tokens, max_new_tokens, prompt_ids, prefix_ids=[], suffix_ids=[],
-        temperature=1.0, token_ranges=None, hmm_batch_size=None):
+        temperature=1.0, token_ranges=None, hmm_batch_size=None, qbit=None):
 
         device = hmm_model.alpha_exp.device
         hidden_states, vocab_size = hmm_model.hidden_states, hmm_model.vocab_size
@@ -193,41 +195,42 @@ class ConstraintLogitsProcessor(LogitsProcessor):
 
         self.dfa_model = dfa_model
         self.hmm_model = hmm_model
+        self.qbit = qbit
 
 
     def __call__(self, input_ids, scores):
-        input_ids = input_ids[:,len(self.prompt_ids):].tolist()
-        prefixes = [tuple(self.prefix_ids + x) for x in input_ids]
+        with record_function("LogitsProcessor Call"):
+            input_ids = input_ids[:,len(self.prompt_ids):].tolist() # input_ids [beam_size 128, k]
+            prefixes = [tuple(self.prefix_ids + x) for x in input_ids]
 
-        if len(prefixes[0]) > 0:
-            selected_idx = [i for i, prefix in enumerate(prefixes)
-                if prefix[-1] != self.hmm_model.eos_token_id]
-        else:
-            selected_idx = [i for i, _ in enumerate(prefixes)]
-
-        logits = torch.log_softmax(scores, dim=-1)
-
-        if len(selected_idx) > 0:
-            selected_prefixes = [prefixes[i] for i in selected_idx]
-            if len(self.token_ranges) == 1:
-                selected_token_ranges = [self.token_ranges[0] for _ in selected_idx]
+            if len(prefixes[0]) > 0:
+                selected_idx = [i for i, prefix in enumerate(prefixes)
+                    if prefix[-1] != self.hmm_model.eos_token_id]
             else:
-                selected_token_ranges = [self.token_ranges[i] for i in selected_idx]
+                selected_idx = [i for i, _ in enumerate(prefixes)]
 
-            hmm_batch_size = len(selected_idx) if self.hmm_batch_size is None else min(len(selected_idx), self.hmm_batch_size)
-            hmm_logits, hmm_logits_ = self.compute_logits(selected_prefixes, selected_token_ranges, hmm_batch_size)
-            hmm_logits -= hmm_logits_
+            logits = torch.log_softmax(scores, dim=-1) # 128 x 50257
 
-            # ban special tokens that are not in the HMM
-            if hmm_logits.shape[1] < logits.shape[1]:
-                neginf = torch.full((hmm_logits.shape[0], logits.shape[1]-hmm_logits.shape[1]), -1e30, device=hmm_logits.device)
-                hmm_logits = torch.cat((hmm_logits, neginf), dim=1)
-            logits[selected_idx, :] += hmm_logits
-            logits = torch.log_softmax(logits, dim=-1)
+            if len(selected_idx) > 0:
+                selected_prefixes = [prefixes[i] for i in selected_idx]
+                if len(self.token_ranges) == 1:
+                    selected_token_ranges = [self.token_ranges[0] for _ in selected_idx]
+                else:
+                    selected_token_ranges = [self.token_ranges[i] for i in selected_idx]
 
-        logits = torch.log_softmax(logits / self.temperature, dim=-1)
+                hmm_batch_size = len(selected_idx) if self.hmm_batch_size is None else min(len(selected_idx), self.hmm_batch_size)
+                hmm_logits, hmm_logits_ = self.compute_logits(selected_prefixes, selected_token_ranges, hmm_batch_size)
+                hmm_logits -= hmm_logits_ # len(selected_idx)x50257, eg. 128 x 50257
+                # ban special tokens that are not in the HMM
+                if hmm_logits.shape[1] < logits.shape[1]:
+                    neginf = torch.full((hmm_logits.shape[0], logits.shape[1]-hmm_logits.shape[1]), -1e30, device=hmm_logits.device)
+                    hmm_logits = torch.cat((hmm_logits, neginf), dim=1)
+                logits[selected_idx, :] += hmm_logits
+                logits = torch.log_softmax(logits, dim=-1)
 
-        return logits
+            logits = torch.log_softmax(logits / self.temperature, dim=-1)
+
+            return logits
 
 
     # compute logits for next_token
@@ -252,6 +255,10 @@ class ConstraintLogitsProcessor(LogitsProcessor):
             A = torch.stack([A_cache[prefix[:-1]] for prefix in prefixes], dim=0) # len(prefixes) * hidden_states
             log_probs = torch.stack([beta[:, prefix[-1]] for prefix in prefixes], dim=0) # len(prefixes) * hidden_states
             A += log_probs
+            # if self.qbit:
+            #     A = q_matmul_loga_b(A, alpha_exp, self.qbit)
+            # else:
+            #     A = matmul_loga_b(A, alpha_exp)
             A = matmul_loga_b(A, alpha_exp)
             for i, prefix in enumerate(prefixes):
                 A_cache[prefix] = A[i]
@@ -290,7 +297,15 @@ class ConstraintLogitsProcessor(LogitsProcessor):
                 C = A_batch[:, None, :] + C_batch # batch_size_ * num_states * hidden_states
 
                 C_shape = C.shape
-                C = matmul_log(torch.flatten(C, start_dim=0, end_dim=1), beta) # (batch_size_ * num_states) * vocab_size
+                # print(C.shape, torch.flatten(C).shape)
+                # with record_function("matmul_C_beta"):
+                #     C = matmul_log(torch.flatten(C, start_dim=0, end_dim=1), beta) # (batch_size_ * num_states) * vocab_size
+                # print(torch.sum(C.eq(0)), torch.sum(C.eq(neginf)), torch.flatten(C).shape[0])
+                # if self.qbit:
+                #     C = q_matmul_log(torch.flatten(C, start_dim=0, end_dim=1), beta, self.qbit)
+                # else:
+                #     C = matmul_log(torch.flatten(C, start_dim=0, end_dim=1), beta)
+                C = matmul_log(torch.flatten(C, start_dim=0, end_dim=1), beta) # (beam_size * num_states) * vocab_size
                 C = C.view(C_shape[0], C_shape[1], -1) # batch_size_ * num_states * vocab_size
 
                 mask = torch.stack([VE_mask[D_cache[prefix]] for prefix in prefixes_batch], dim=0) # prefix_mask, batch_size_ * num_transitions
@@ -298,6 +313,7 @@ class ConstraintLogitsProcessor(LogitsProcessor):
                 mask = torch.transpose(mask, 1, 2) # batch_size_ * num_states * num_transitions
 
                 mask_shape = mask.shape
+                # mask = q_matmul(torch.flatten(mask, start_dim=0, end_dim=1), T_mask, 1)
                 mask = torch.matmul(torch.flatten(mask, start_dim=0, end_dim=1), T_mask) # (batch_size_ * num_states) * vocab_size
                 mask = mask.view(mask_shape[0], mask_shape[1], -1) # batch_size_ * num_states * vocab_size
                 mask = torch.nan_to_num(torch.log(mask), neginf=neginf)
@@ -318,6 +334,11 @@ class ConstraintLogitsProcessor(LogitsProcessor):
                 logits[prefix_idx, suffix[offset]] = torch.logaddexp(logits[prefix_idx, suffix[offset]], log_prob)
 
         # compute normalizing constant; no hmm mini-batch here
+        # if self.qbit:
+        #     logits_ = q_matmul_log(A, beta, self.qbit)
+        # else:
+        #     logits_ = matmul_log(A, beta)
+        # logits_ = _test_matmul_log.matmul_log(A, beta) # A[128, 4096], beta[4096, 50257]
         logits_ = matmul_log(A, beta)
 
         return logits, logits_

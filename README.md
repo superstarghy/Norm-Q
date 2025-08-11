@@ -21,14 +21,17 @@ With this codebase, users can impose logical constraints on LLM outputs and impl
 
 ## Installation
 
-We recommend using `conda` for setting up the environment for Ctrl-G.
+We recommend using `conda` or `mamba` for setting up the environment for Ctrl-G.
 
-1. `conda create --name ctrlg python=3.11`
-1. `conda activate ctrlg`
-1. `conda install pytorch torchvision torchaudio pytorch-cuda=12.1 -c pytorch -c nvidia`
-1. `conda install -c pytorch -c nvidia faiss-gpu=1.8.0` #only required for HMM distillation
-1. `pip install transformers==4.41.2 huggingface_hub==0.23.4 sentencepiece protobuf notebook ipywidgets`
+1. `mamba create --name test python=3.11`
+1. `mamba activate test`
+1. `mamba install pytorch torchvision torchaudio pytorch-cuda=12.1 -c pytorch -c nvidia`
+1. `mamba install conda-forge::faiss-gpu` #only required for HMM distillation
+1. `mamba install transformers==4.41.2 huggingface_hub==0.23.4 sentencepiece protobuf notebook ipywidgets`
+1. `mamba install -c conda-forge lemminflect rouge-score evaluate spacy cupy`
+1. `python -m spacy download en_core_web_sm`
 1. `pip install -e .` # installing ctrlg locally
+1. `bash scripts/download_eval_dependencies.sh`
 
 ## Released checkpoints
 For your convenience, we release a variety of LLM checkpoints and their approximating HMMs on [_huggingface_hub_](https://huggingface.co/ctrlg).

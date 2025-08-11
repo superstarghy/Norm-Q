@@ -1,6 +1,12 @@
+data
+fig*
+log
+ctrlg.egg-info
+ctrlg/__pycache__
 workspace/*
 distillation/workspace/
 .vscode
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
