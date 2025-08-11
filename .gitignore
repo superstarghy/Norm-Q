@@ -9,6 +9,8 @@ distillation/workspace/
 eval_metrics/tmp
 eval_metrics/cache
 result
+NeSy.json
+trace.json
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
