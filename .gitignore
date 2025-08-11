@@ -6,6 +6,8 @@ ctrlg/__pycache__
 workspace/*
 distillation/workspace/
 .vscode
+eval_metrics/tmp
+results
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
