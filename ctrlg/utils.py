@@ -1,17 +1,17 @@
 import torch
 from transformers import LogitsProcessor
-from torch.profiler import record_function
+# from torch.profiler import record_function
 from .mytest import *
 
 torch.set_float32_matmul_precision('high')
 
 
-@torch.compile
+# @torch.compile
 def logsumexp(A, dim):
     return torch.logsumexp(A, dim)
 
 
-@torch.compile
+# @torch.compile
 def matmul_log(A, B):
     bd = len(B.shape) - 2
     A_max = torch.amax(A, dim=-1, keepdim=True)
@@ -27,7 +27,7 @@ def matmul_log(A, B):
     return C
 
 
-@torch.compile
+# @torch.compile
 def matmul_loga_b(A, B):
     A_max = torch.amax(A, dim=-1, keepdim=True)
     A = A - A_max
@@ -39,7 +39,7 @@ def matmul_loga_b(A, B):
     return C
 
 
-@torch.compile
+# @torch.compile
 def matmul_a_logb(A, B):
     bd = len(B.shape) - 2
     B_max = torch.amax(B, dim=bd, keepdim=True)
@@ -52,7 +52,7 @@ def matmul_a_logb(A, B):
     return C
 
 
-@torch.compile
+# @torch.compile
 def distribute_state_weights(E2D, y):
     device = y.device
     _, hidden_states = y.shape
@@ -60,7 +60,7 @@ def distribute_state_weights(E2D, y):
             torch.arange(0, hidden_states, device=device)[None, :]]
 
 
-@torch.compile
+# @torch.compile
 def aggregate_edge_weights(E2S, y, num_states):
     device = y.device
     _, hidden_states = y.shape
@@ -199,38 +199,37 @@ class ConstraintLogitsProcessor(LogitsProcessor):
 
 
     def __call__(self, input_ids, scores):
-        with record_function("LogitsProcessor Call"):
-            input_ids = input_ids[:,len(self.prompt_ids):].tolist() # input_ids [beam_size 128, k]
-            prefixes = [tuple(self.prefix_ids + x) for x in input_ids]
+        input_ids = input_ids[:,len(self.prompt_ids):].tolist() # input_ids [beam_size 128, k]
+        prefixes = [tuple(self.prefix_ids + x) for x in input_ids]
 
-            if len(prefixes[0]) > 0:
-                selected_idx = [i for i, prefix in enumerate(prefixes)
-                    if prefix[-1] != self.hmm_model.eos_token_id]
+        if len(prefixes[0]) > 0:
+            selected_idx = [i for i, prefix in enumerate(prefixes)
+                if prefix[-1] != self.hmm_model.eos_token_id]
+        else:
+            selected_idx = [i for i, _ in enumerate(prefixes)]
+
+        logits = torch.log_softmax(scores, dim=-1) # 128 x 50257
+
+        if len(selected_idx) > 0:
+            selected_prefixes = [prefixes[i] for i in selected_idx]
+            if len(self.token_ranges) == 1:
+                selected_token_ranges = [self.token_ranges[0] for _ in selected_idx]
             else:
-                selected_idx = [i for i, _ in enumerate(prefixes)]
+                selected_token_ranges = [self.token_ranges[i] for i in selected_idx]
 
-            logits = torch.log_softmax(scores, dim=-1) # 128 x 50257
+            hmm_batch_size = len(selected_idx) if self.hmm_batch_size is None else min(len(selected_idx), self.hmm_batch_size)
+            hmm_logits, hmm_logits_ = self.compute_logits(selected_prefixes, selected_token_ranges, hmm_batch_size)
+            hmm_logits -= hmm_logits_ # len(selected_idx)x50257, eg. 128 x 50257
+            # ban special tokens that are not in the HMM
+            if hmm_logits.shape[1] < logits.shape[1]:
+                neginf = torch.full((hmm_logits.shape[0], logits.shape[1]-hmm_logits.shape[1]), -1e30, device=hmm_logits.device)
+                hmm_logits = torch.cat((hmm_logits, neginf), dim=1)
+            logits[selected_idx, :] += hmm_logits
+            logits = torch.log_softmax(logits, dim=-1)
 
-            if len(selected_idx) > 0:
-                selected_prefixes = [prefixes[i] for i in selected_idx]
-                if len(self.token_ranges) == 1:
-                    selected_token_ranges = [self.token_ranges[0] for _ in selected_idx]
-                else:
-                    selected_token_ranges = [self.token_ranges[i] for i in selected_idx]
+        logits = torch.log_softmax(logits / self.temperature, dim=-1)
 
-                hmm_batch_size = len(selected_idx) if self.hmm_batch_size is None else min(len(selected_idx), self.hmm_batch_size)
-                hmm_logits, hmm_logits_ = self.compute_logits(selected_prefixes, selected_token_ranges, hmm_batch_size)
-                hmm_logits -= hmm_logits_ # len(selected_idx)x50257, eg. 128 x 50257
-                # ban special tokens that are not in the HMM
-                if hmm_logits.shape[1] < logits.shape[1]:
-                    neginf = torch.full((hmm_logits.shape[0], logits.shape[1]-hmm_logits.shape[1]), -1e30, device=hmm_logits.device)
-                    hmm_logits = torch.cat((hmm_logits, neginf), dim=1)
-                logits[selected_idx, :] += hmm_logits
-                logits = torch.log_softmax(logits, dim=-1)
-
-            logits = torch.log_softmax(logits / self.temperature, dim=-1)
-
-            return logits
+        return logits
 
 
     # compute logits for next_token

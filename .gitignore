@@ -1,5 +1,5 @@
 data
-fig*
+fig_tmp
 log
 ctrlg.egg-info
 ctrlg/__pycache__
