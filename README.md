@@ -63,7 +63,7 @@ Check the [scripts](./scripts/) directory to run applications, conduct quantizat
 
 ### assets
 
-The raw models refer to Ctrl-G, which is available on huggingface: https://huggingface.co/ctrlg.
+The raw models refer to Ctrl-G, which are available on huggingface: https://huggingface.co/ctrlg.
 
 The dataset is common_gen: https://huggingface.co/datasets/allenai/common_gen.
 
