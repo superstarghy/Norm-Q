@@ -11,7 +11,7 @@ The Norm-Q method is a normalized linear quantization approach for compressing p
 In the case of the constrained generation task of large language models, we successfully quantize an HMM of 4096 hidden states to 8 bits without loss and, at most, 3 bits with acceptable loss.
 
 <p align="center">
-<img src="fig/fig2.PNG" width="75%">
+<img src="fig/fig2.PNG" width="65%">
 </p>
 
 ## Installation
@@ -46,7 +46,7 @@ The [eval_metrics](./eval_metrics/) directory contains the code for evaluation.
 - Prepare an LLM model and a dataset
 - Distill an HMM model from the LLM
 - Quantize the model, conduct EM aware training if needed
-- Run benchmarking and evalute
+- Run benchmarking and evaluate
 
 
 ### examples
