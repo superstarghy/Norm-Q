@@ -2,13 +2,17 @@
 
 Codebase for Norm-Q: Effective Compression Method for Hidden Markov Models in Neuro-Symbolic Applications. [Asilomar 2025][[paper]()]
 
-![Fig 1](fig/fig1.PNG)
+<p align="center">
+<img src="fig/fig1.PNG" width="80%">
+</p>
 
 The Norm-Q method is a normalized linear quantization approach for compressing probabilistic symbolic models, especially Hidden Markov Models (HMM).
 
 In the case of the constrained generation task of large language models, we successfully quantize an HMM of 4096 hidden states to 8 bits without loss and, at most, 3 bits with acceptable loss.
 
-![Fig 2](fig/fig2.PNG)
+<p align="center">
+<img src="fig/fig2.PNG" width="75%">
+</p>
 
 ## Installation
 
