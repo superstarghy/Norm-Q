@@ -95,6 +95,6 @@ Norm-Q: Effective Compression Method for Hidden Markov Models in Neuro-Symbolic 
 }
 ```
 
-## LISCENSE
+## LICENSE
 
-[LISCENCE FILE](./LICENSE)
+[LICENSE FILE](./LICENSE)
