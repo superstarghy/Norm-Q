@@ -1,6 +1,6 @@
 # Norm-Q
 
-Codebase for Norm-Q: Effective Compression Method for Hidden Markov Models in Neuro-Symbolic Applications. [Asilomar 2025][[paper]()]
+Codebase for Norm-Q: Effective Compression Method for Hidden Markov Models in Neuro-Symbolic Applications. [Asilomar 2025][[paper](https://arxiv.org/abs/2509.25439)]
 
 <p align="center">
 <img src="fig/fig1.PNG" width="80%">
@@ -19,6 +19,8 @@ In the case of the constrained generation task of large language models, we succ
 This project is built on Ctrl-G. We recommend using `conda` or `mamba` for setting up the environment for Ctrl-G. The environment has been tested on cuda/12.1 and pytorch 2.5.1.
 
 ```bash
+git clone https://github.com/superstarghy/Norm-Q.git
+
 conda create --name <env_name> python=3.11 mamba
 # replace conda with mamba to accelerate
 conda activate test
@@ -43,8 +45,7 @@ The [eval_metrics](./eval_metrics/) directory contains the code for evaluation.
 
 ### running process
 
-- Prepare an LLM model and a dataset
-- Distill an HMM model from the LLM
+- Distill a hidden Markov model from an LLM
 - Quantize the model, conduct EM aware training if needed
 - Run benchmarking and evaluate
 
@@ -80,7 +81,14 @@ Check [distillation/tutorial_distillation.ipynb](./distillation/tutorial_distill
 
 ## Citation
 
-Norm-Q: Effective Compression Method for Hidden Markov Models in Neuro-Symbolic Applications.
+```bibtex
+@article{gao2025norm,
+  title={Norm-Q: Effective Compression Method for Hidden Markov Models in Neuro-Symbolic Applications},
+  author={Gao, Hanyuan and Yang, Xiaoxuan},
+  journal={arXiv preprint arXiv:2509.25439},
+  year={2025}
+}
+```
 
 ## Reference
 

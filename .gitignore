@@ -11,6 +11,7 @@ eval_metrics/cache
 result
 NeSy.json
 trace.json
+branchbound.py
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
